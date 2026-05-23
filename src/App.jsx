@@ -10,12 +10,13 @@ import About from './pages/About'
 import Stores from './pages/Stores'
 import Contact from './pages/Contact'
 import Header from './components/Header'
+import Footer from './components/Footer'
 
 export default function App(){
   return (
-    <div>
+    <div style={{ display:'flex', flexDirection:'column', minHeight:'100vh' }}>
       <Header />
-      <main>
+      <main style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Home/>} />
           <Route path="/products" element={<Products/>} />
@@ -28,6 +29,9 @@ export default function App(){
           <Route path="/contact" element={<Contact/>} />
         </Routes>
       </main>
+      <Footer />
+      <a href="https://wa.me/917034900009" target="_blank" rel="noopener noreferrer"
+        className="whatsapp-btn" aria-label="Chat on WhatsApp">💬</a>
     </div>
   )
 }

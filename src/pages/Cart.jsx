@@ -1,82 +1,67 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useStore } from '../context/Store'
 
 export default function Cart(){
   const { cart, updateQty, removeFromCart, priceFor, CATALOG } = useStore()
-  const [address, setAddress] = useState({ city: '', pincode: '', line1: '' })
-
+  const [address, setAddress] = useState({ city: '', pincode: '' })
   const allProducts = [...CATALOG.dryFruits, ...CATALOG.spices, ...CATALOG.seeds]
-  const getProduct = (id) => allProducts.find(p => p.id === id)
-
-  const cartTotal = cart.reduce((sum, it) => sum + (priceFor(it.productId) * it.qty), 0)
-  const isHyderabad = address.city.toLowerCase().includes('hyderabad')
-  const codEligible = isHyderabad && cartTotal >= 299 && cart.length > 0
-
+  const getProduct = (id) => allProducts.find(p=>p.id===id)
+  const cartTotal = cart.reduce((sum,it)=>sum+(priceFor(it.productId)*it.qty),0)
+  const isHyd = address.city.toLowerCase().includes('hyderabad')
+  const codOk = isHyd && cartTotal >= 299 && cart.length > 0
   return (
-    <main className="container">
-      <h2>Your Cart</h2>
+    <div className="container cart-page">
+      <h2>Your Cart {cart.length > 0 && <span style={{fontSize:16,color:'var(--muted)',fontFamily:'var(--font-body)',fontWeight:400}}>({cart.length} item{cart.length>1?'s':''})</span>}</h2>
       {cart.length === 0 ? (
-        <div style={{ marginTop: 12, color: '#666' }}>Your cart is empty.</div>
+        <div style={{textAlign:'center',padding:'80px 20px',color:'var(--muted)'}}>
+          <div style={{fontSize:48,marginBottom:16}}>🛒</div>
+          <p style={{marginBottom:20,fontSize:16}}>Your cart is empty</p>
+          <Link to="/products" className="btn-primary" style={{border:'none'}}>Browse Products</Link>
+        </div>
       ) : (
-        <div style={{ marginTop: 12 }}>
-          {cart.map((it, idx) => {
-            const price = priceFor(it.productId)
-            const product = getProduct(it.productId)
-            return (
-              <div key={idx} style={{ display:'flex', gap:12, alignItems:'center', padding:12, borderBottom:'1px solid #eee' }}>
-                <img
-                  src={product?.image}
-                  alt={product?.name}
-                  style={{ width:90, height:70, objectFit:'cover', borderRadius:6, background:'#f2f2f2' }}
-                  loading="lazy"
-                />
-                <div style={{ flex:1 }}>
-                  <div style={{ fontWeight:700 }}>{product?.name ?? it.productId}</div>
-                  <div style={{ color:'#666', fontSize:14 }}>{it.size} &bull; Qty {it.qty}</div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 360px',gap:32,alignItems:'start'}}>
+          <div>
+            {cart.map((it,idx)=>{
+              const price = priceFor(it.productId)
+              const product = getProduct(it.productId)
+              return (
+                <div key={idx} className="cart-item">
+                  <img src={product?.image} alt={product?.name??it.productId} loading="lazy" width="90" height="90" />
+                  <div className="cart-item-info">
+                    <div className="name">{product?.name??it.productId}</div>
+                    <div className="meta">{it.size} · Qty {it.qty}</div>
+                    <button className="cart-remove" onClick={()=>removeFromCart(idx)}>Remove</button>
+                  </div>
+                  <div className="cart-item-controls">
+                    <button onClick={()=>updateQty(idx,1)} aria-label="Increase">+</button>
+                    <span style={{fontSize:14,fontWeight:700}}>{it.qty}</span>
+                    <button onClick={()=>updateQty(idx,-1)} aria-label="Decrease">−</button>
+                  </div>
+                  <div className="cart-item-price">Rs. {price*it.qty}</div>
                 </div>
-                <div style={{ fontWeight:700 }}>Rs. {price * it.qty}</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                  <button onClick={()=>updateQty(idx,1)} aria-label="Increase quantity">+</button>
-                  <button onClick={()=>updateQty(idx,-1)} aria-label="Decrease quantity">-</button>
-                  <button onClick={()=>removeFromCart(idx)} style={{ color:'#b33' }} aria-label="Remove item">Remove</button>
-                </div>
-              </div>
-            )
-          })}
-
-          <div style={{ marginTop:16, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <div>
-              <div style={{ fontSize:18, fontWeight:700 }}>Total</div>
-              <div style={{ color:'#666', fontSize:13 }}>Inclusive of taxes (demo)</div>
+              )
+            })}
+          </div>
+          <div className="cart-summary">
+            <div className="total-row">
+              <span className="total-label">Order Total</span>
+              <span className="total-val">Rs. {cartTotal}</span>
             </div>
-            <div style={{ fontSize:20, fontWeight:800 }}>Rs. {cartTotal}</div>
-          </div>
-
-          <div style={{ marginTop:18 }}>
-            <input
-              placeholder="City"
-              value={address.city}
-              onChange={(e)=>setAddress({...address, city: e.target.value})}
-              style={{ padding:8, borderRadius:6, border:'1px solid #ddd', marginRight:8 }}
-            />
-            <input
-              placeholder="Pincode"
-              value={address.pincode}
-              onChange={(e)=>setAddress({...address, pincode: e.target.value})}
-              style={{ padding:8, borderRadius:6, border:'1px solid #ddd' }}
-            />
-          </div>
-          <div style={{ marginTop:8, color:'#666', fontSize:13 }}>COD eligibility: Hyderabad only + min Rs. 299</div>
-          <div style={{ marginTop:8 }}>
+            <p className="note">Inclusive of all taxes</p>
+            <div className="address-row">
+              <input placeholder="City" value={address.city} onChange={e=>setAddress({...address,city:e.target.value})} />
+              <input placeholder="Pincode" value={address.pincode} onChange={e=>setAddress({...address,pincode:e.target.value})} />
+            </div>
+            <p className="cod-note">COD available for Hyderabad orders above Rs. 299</p>
             <button
-              onClick={()=>alert(codEligible ? 'COD available (demo) — order placed!' : 'COD not available for this address or cart total.')}
-              style={{ padding:'10px 20px', borderRadius:6, background:'#28a745', color:'#fff', border:'none', fontWeight:700, cursor:'pointer' }}
-            >
-              Place Order (COD if eligible)
-            </button>
+              className="btn-primary"
+              style={{width:'100%',border:'none',padding:'14px',fontSize:15}}
+              onClick={()=>alert(codOk ? '✅ Order placed via COD! (demo)' : '❌ COD not available for this address/amount.')}
+            >Place Order</button>
           </div>
         </div>
       )}
-    </main>
+    </div>
   )
 }
