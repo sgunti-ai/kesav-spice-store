@@ -1,16 +1,18 @@
 import React from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import ProductCard from '../components/ProductCard'
 import { CATALOG, initialPrices } from '../data/catalog'
 
 export default function Category(){
   const { slug } = useParams()
+  const navigate = useNavigate()
   let items = []
   let title = ''
   if(slug === 'spices'){ items = CATALOG.spices; title = 'Spices' }
   else if(slug === 'dry-fruits'){ items = CATALOG.dryFruits; title = 'Dry Fruits & Nuts' }
   else if(slug === 'seeds'){ items = CATALOG.seeds; title = 'Seeds' }
   else { items = [...CATALOG.dryFruits, ...CATALOG.spices, ...CATALOG.seeds]; title = 'All Products' }
+
   return (
     <main className="container">
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -19,7 +21,13 @@ export default function Category(){
       </div>
       <div className="grid-3" style={{ marginTop: 18 }}>
         {items.map(p => (
-          <ProductCard key={p.id} product={p} price={initialPrices[p.priceKey]} onAdd={()=>{}} onView={()=>{}} />
+          <ProductCard
+            key={p.id}
+            product={p}
+            price={initialPrices[p.priceKey]}
+            onAdd={()=>{}}
+            onView={(id) => navigate(`/products/${id}`)}
+          />
         ))}
       </div>
     </main>

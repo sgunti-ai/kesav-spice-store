@@ -2,10 +2,10 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = ">= 4.0"
+      version = ">= 5.0"
     }
   }
-  required_version = ">= 1.1.0"
+  required_version = ">= 1.3.0"
 }
 
 provider "aws" {
@@ -17,7 +17,6 @@ provider "aws" {
 ##########################
 resource "aws_s3_bucket" "images" {
   bucket = var.s3_bucket_name
-  acl    = "private"
 
   tags = {
     Name        = "kesav-spice-store-images"
@@ -32,6 +31,13 @@ resource "aws_s3_bucket_versioning" "images_ver" {
   }
 }
 
+resource "aws_s3_bucket_ownership_controls" "images_ownership" {
+  bucket = aws_s3_bucket.images.id
+  rule {
+    object_ownership = "BucketOwnerEnforced"
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "images_block" {
   bucket                  = aws_s3_bucket.images.id
   block_public_acls       = true
@@ -41,30 +47,42 @@ resource "aws_s3_bucket_public_access_block" "images_block" {
 }
 
 ##########################
-# CloudFront Origin Access Identity (OAI)
+# CloudFront Origin Access Control (OAC) — replaces deprecated OAI
 ##########################
-resource "aws_cloudfront_origin_access_identity" "oai" {
-  comment = "OAI for Kesav Spice Store images"
+resource "aws_cloudfront_origin_access_control" "oac" {
+  name                              = "kesav-spice-store-oac"
+  description                       = "OAC for Kesav Spice Store S3"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
 }
 
 ##########################
-# S3 bucket policy to allow CloudFront OAI to GetObject
+# S3 bucket policy — allow CloudFront OAC
 ##########################
+data "aws_caller_identity" "current" {}
+
 data "aws_iam_policy_document" "s3_policy" {
   statement {
     sid = "AllowCloudFrontServicePrincipalReadOnly"
     principals {
-      type        = "AWS"
-      identifiers = [aws_cloudfront_origin_access_identity.oai.iam_arn]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
     }
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.images.arn}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.cdn.arn]
+    }
   }
 }
 
 resource "aws_s3_bucket_policy" "images_policy" {
-  bucket = aws_s3_bucket.images.id
-  policy = data.aws_iam_policy_document.s3_policy.json
+  bucket     = aws_s3_bucket.images.id
+  policy     = data.aws_iam_policy_document.s3_policy.json
+  depends_on = [aws_s3_bucket_public_access_block.images_block]
 }
 
 ##########################
@@ -73,29 +91,40 @@ resource "aws_s3_bucket_policy" "images_policy" {
 resource "aws_cloudfront_distribution" "cdn" {
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "Kesav Spice Store CDN for product images"
+  comment             = "Kesav Spice Store CDN"
   default_root_object = "index.html"
 
   origin {
-    domain_name = aws_s3_bucket.images.bucket_regional_domain_name
-    origin_id   = "s3-images-origin"
-    s3_origin_config {
-      origin_access_identity = aws_cloudfront_origin_access_identity.oai.cloudfront_access_identity_path
-    }
+    domain_name              = aws_s3_bucket.images.bucket_regional_domain_name
+    origin_id                = "s3-images-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   default_cache_behavior {
-    allowed_methods  = ["GET", "HEAD"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "s3-images-origin"
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
-    }
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "s3-images-origin"
     viewer_protocol_policy = "redirect-to-https"
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+  }
+
+  custom_error_response {
+    error_code         = 403
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
   }
 
   restrictions {
@@ -115,7 +144,7 @@ resource "aws_cloudfront_distribution" "cdn" {
 }
 
 ##########################
-# IAM user & policy for CI to upload assets
+# IAM user & policy for CI uploads
 ##########################
 resource "aws_iam_user" "ci_uploader" {
   name = "kesav-ci-uploader"
@@ -126,15 +155,19 @@ data "aws_iam_policy_document" "ci_s3_policy_doc" {
     sid = "AllowS3AccessToImagesPrefix"
     actions = [
       "s3:PutObject",
-      "s3:PutObjectAcl",
       "s3:GetObject",
       "s3:ListBucket",
-      "s3:GetObjectAcl"
+      "s3:DeleteObject"
     ]
     resources = [
       aws_s3_bucket.images.arn,
       "${aws_s3_bucket.images.arn}/*"
     ]
+  }
+  statement {
+    sid       = "AllowCloudfrontInvalidation"
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = [aws_cloudfront_distribution.cdn.arn]
   }
 }
 
@@ -167,11 +200,11 @@ output "cloudfront_domain" {
 
 output "ci_access_key_id" {
   value       = aws_iam_access_key.ci_access_key.id
-  description = "CI IAM access key id (store securely in GitHub Secrets)"
+  description = "CI IAM access key id — store in GitHub Secrets"
 }
 
 output "ci_secret_access_key" {
   value       = aws_iam_access_key.ci_access_key.secret
-  description = "CI IAM secret access key (store securely in GitHub Secrets)"
+  description = "CI IAM secret access key — store in GitHub Secrets"
   sensitive   = true
 }
