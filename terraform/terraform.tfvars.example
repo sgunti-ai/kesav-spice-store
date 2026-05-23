@@ -1,0 +1,4 @@
+aws_region     = "ap-south-1"
+s3_bucket_name = "kesav-spice-store-images-unique-12345"
+environment    = "dev"
+# acm_certificate_arn = "" # optional
